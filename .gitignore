@@ -8,6 +8,11 @@
 *.so
 *.dylib
 
+# Other files and folders
+.settings/
+.idea/
+.log/
+
 # Test binary, built with `go test -c`
 *.test
 
