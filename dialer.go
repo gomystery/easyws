@@ -311,7 +311,7 @@ func (d Dialer) Upgrade(conn io.ReadWriter, u *url.URL) (br *bufio.Reader, hs Ha
 	initNonce(nonce)
 
 	httpWriteUpgradeRequest(bw, u, nonce, d.Protocols, d.Extensions, d.Header)
-	if _,err := conn.Write(bw.Bytes()); err != nil {
+	if _, err := conn.Write(bw.Bytes()); err != nil {
 		return br, hs, err
 	}
 
@@ -443,11 +443,11 @@ func (d Dialer) Upgrade(conn io.ReadWriter, u *url.URL) (br *bufio.Reader, hs Ha
 	}
 	return br, hs, err
 }
-//
-//// PutReader returns bufio.Reader instance to the inner reuse pool.
-//// It is useful in rare cases, when Dialer.Dial() returns non-nil buffer which
-//// contains unprocessed buffered data, that was sent by the server quickly
-//// right after handshake.
+
+// // PutReader returns bufio.Reader instance to the inner reuse pool.
+// // It is useful in rare cases, when Dialer.Dial() returns non-nil buffer which
+// // contains unprocessed buffered data, that was sent by the server quickly
+// // right after handshake.
 func PutReader(br *bufio.Reader) {
 	pbufio.PutReader(br)
 }

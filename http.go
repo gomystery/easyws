@@ -195,7 +195,7 @@ func strSelectProtocol(h string, check func(string) bool) (ret string, ok bool) 
 	})
 	return ret, ok
 }
-//
+
 func btsSelectProtocol(h []byte, check func([]byte) bool) (ret string, ok bool) {
 	var selected []byte
 	ok = ScanTokens(h, func(v []byte) bool {
@@ -218,7 +218,7 @@ func btsSelectExtensions(h []byte, selected []Option, check func(Option) bool) (
 	}
 	return s.Select(h, selected)
 }
-//
+
 func negotiateMaybe(in Option, dest []Option, f func(Option) (Option, error)) ([]Option, error) {
 	if in.Size() == 0 {
 		return dest, nil
@@ -232,7 +232,7 @@ func negotiateMaybe(in Option, dest []Option, f func(Option) (Option, error)) ([
 	}
 	return dest, nil
 }
-//
+
 func negotiateExtensions(
 	h []byte, dest []Option,
 	f func(Option) (Option, error),
@@ -275,7 +275,7 @@ func httpWriteHeaderKey(bw *bytes.Buffer, key string) {
 	bw.WriteString(key)
 	bw.WriteString(colonAndSpace)
 }
-//
+
 func httpWriteUpgradeRequest(
 	bw *bytes.Buffer,
 	u *url.URL,
@@ -322,7 +322,7 @@ func httpWriteUpgradeRequest(
 
 	bw.WriteString(crlf)
 }
-//
+
 func httpWriteResponseUpgrade(bw *bytes.Buffer, nonce []byte, hs Handshake, header HandshakeHeaderFunc) {
 	bw.WriteString(textHeadUpgrade)
 

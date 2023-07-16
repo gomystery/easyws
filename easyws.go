@@ -2,16 +2,14 @@ package easyws
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
-	"context"
 	"net/http"
 
-	_interface "github.com/gomystery/easynet/interface"
 	"github.com/gomystery/easynet"
-
+	_interface "github.com/gomystery/easynet/interface"
 )
-
 
 type Handler struct {
 	IsUpgrade map[string]bool
@@ -28,30 +26,28 @@ func (h Handler) OnConnect(conn _interface.IConnection) error {
 
 }
 
-
 func (h Handler) OnReceive(conn _interface.IConnection, stream _interface.IInputStream) ([]byte, error) {
 
 	// todo handover
-	 isUpgrade,ok:=h.IsUpgrade[conn.RemoteAddr()]
-	 if (!ok) || (!isUpgrade) {
-		 upgrader  := &Upgrader{}
-		 _,out, err :=upgrader.Upgrade(stream)
-		 if err != nil {
-			 return nil,err
-		 }
-		 return out, nil
-	 }
-
+	isUpgrade, ok := h.IsUpgrade[conn.RemoteAddr()]
+	if (!ok) || (!isUpgrade) {
+		upgrader := &Upgrader{}
+		_, out, err := upgrader.Upgrade(stream)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
 
 	// todo frame
 	var outFrame []byte
-	header,err:=ReadHeader(stream)
+	header, err := ReadHeader(stream)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	payload := make([]byte, header.Length)
-	data :=stream.Begin(nil)
-	copy(payload,data[:header.Length])
+	data := stream.Begin(nil)
+	copy(payload, data[:header.Length])
 	stream.End(data[header.Length:])
 
 	if header.Masked {
@@ -62,15 +58,15 @@ func (h Handler) OnReceive(conn _interface.IConnection, stream _interface.IInput
 	// RFC6455 says.
 	header.Masked = false
 
-	wbuf,err := WriteHeader(header)
+	wbuf, err := WriteHeader(header)
 	if err != nil {
 		return nil, err
 	}
-	outFrame = make([]byte,len(wbuf)+len(payload))
-	copy(outFrame[:len(wbuf)],wbuf)
-	copy(outFrame[len(wbuf):len(wbuf)+len(payload)],payload)
+	outFrame = make([]byte, len(wbuf)+len(payload))
+	copy(outFrame[:len(wbuf)], wbuf)
+	copy(outFrame[len(wbuf):len(wbuf)+len(payload)], payload)
 	if header.OpCode == OpClose {
-		return nil,nil
+		return nil, nil
 	}
 	return outFrame, nil
 
@@ -84,32 +80,25 @@ func (h Handler) OnClose(conn _interface.IConnection, err error) error {
 	return nil
 }
 
-
 func NewEasyWs(ip string, port int32) *EasyWs {
 	config := easynet.NewDefaultNetConfig("tcp", ip, port)
 	handler := &Handler{
 		IsUpgrade: map[string]bool{},
 	}
 	net := easynet.NewEasyNet(context.Background(), "NetPoll", config, handler)
-	ws :=&EasyWs{
+	ws := &EasyWs{
 		Handler: handler,
-		EasyNet:net,
+		EasyNet: net,
 	}
 
 	return ws
 }
 
 type EasyWs struct {
-
-	Handler  *Handler
+	Handler *Handler
 
 	EasyNet *easynet.EasyNet
-
 }
-
-
-
-
 
 // Upgrader contains options for upgrading connection to websocket.
 type Upgrader struct {
@@ -251,6 +240,7 @@ type Upgrader struct {
 	// RejectConnectionError could be used to get more control on response.
 	OnBeforeUpgrade func() (header HandshakeHeader, err error)
 }
+
 // Upgrade zero-copy upgrades connection to WebSocket. It interprets given conn
 // as connection with incoming HTTP Upgrade request.
 //
@@ -260,7 +250,7 @@ type Upgrader struct {
 // malformed and usually connection should be closed.
 // Even when error is non-nil Upgrade will write appropriate response into
 // connection in compliance with RFC.
-func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []byte, err error) {
+func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake, out []byte, err error) {
 	// headerSeen constants helps to report whether or not some header was seen
 	// during reading request bytes.
 	const (
@@ -280,18 +270,15 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []by
 			headerSeenSecKey
 	)
 
-
-
-
 	// Read HTTP request line like "GET /ws HTTP/1.1".
 	rl, err := readLine(stream)
 	if err != nil {
-		return hs,nil, err
+		return hs, nil, err
 	}
 	// Parse request line data like HTTP version, uri and method.
 	req, err := httpParseRequestLine(rl)
 	if err != nil {
-		return hs,nil, err
+		return hs, nil, err
 	}
 
 	// Prepare stack-based handshake header list.
@@ -341,7 +328,7 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []by
 	for err == nil {
 		line, e := readLine(stream)
 		if e != nil {
-			return hs,nil, e
+			return hs, nil, e
 		}
 		if len(line) == 0 {
 			// Blank line, no more lines to read.
@@ -475,14 +462,13 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []by
 		}
 		httpWriteResponseError(&buffer, err, code, header.WriteTo)
 		// Do not store Flush() error to not override already existing one.
-		return hs,[]byte(buffer.String()), err
+		return hs, []byte(buffer.String()), err
 	}
 
 	httpWriteResponseUpgrade(&buffer, nonce, hs, header.WriteTo)
 
-	return hs,[]byte(buffer.String()), err
+	return hs, []byte(buffer.String()), err
 }
-
 
 type handshakeHeader [2]HandshakeHeader
 
@@ -496,4 +482,3 @@ func (hs handshakeHeader) WriteTo(w io.Writer) (n int64, err error) {
 	}
 	return n, err
 }
-

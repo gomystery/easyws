@@ -6,7 +6,6 @@ import (
 	"io"
 
 	_interface "github.com/gomystery/easynet/interface"
-
 )
 
 // Errors used by frame reader.

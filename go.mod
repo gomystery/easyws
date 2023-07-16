@@ -5,7 +5,11 @@ go 1.19
 //replace github.com/gomystery/easynet => ../easynet
 replace github.com/gomystery/easynet => ../easynet
 
-require github.com/gomystery/easynet v0.0.0-00010101000000-000000000000
+require (
+	github.com/gobwas/httphead v0.0.0-20180130184737-2c6c146eadee
+	github.com/gobwas/pool v0.2.0
+	github.com/gomystery/easynet v0.0.0-00010101000000-000000000000
+)
 
 require (
 	github.com/Allenxuxu/gev v0.5.0 // indirect

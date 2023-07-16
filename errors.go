@@ -63,8 +63,6 @@ func (r *ConnectionRejectedError) StatusCode() int {
 	return r.code
 }
 
-
-
 // Errors used by both client and server when preparing WebSocket handshake.
 var (
 	ErrHandshakeBadProtocol = RejectConnectionError(
