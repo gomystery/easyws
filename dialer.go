@@ -7,13 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
-
-
 )
 
 // Constants used by Dialer.
@@ -76,7 +73,7 @@ type Dialer struct {
 	//
 	// See https://tools.ietf.org/html/rfc6455#section-4.1
 	// See https://tools.ietf.org/html/rfc6455#section-9.1
-	Extensions []httphead.Option
+	//Extensions []httphead.Option
 
 	// Header is an optional HandshakeHeader instance that could be used to
 	// write additional headers to the handshake request.
@@ -186,7 +183,7 @@ func (d Dialer) Dial(ctx context.Context, urlstr string) (conn net.Conn, br *buf
 		}()
 	}
 
-	br, hs, err = d.Upgrade(conn, u)
+	//br, hs, err = d.Upgrade(conn, u)
 
 	return conn, br, hs, err
 }
@@ -249,7 +246,7 @@ func (d Dialer) tlsClient(conn net.Conn, hostname string) net.Conn {
 		config = tlsDefaultConfig()
 	}
 	if config.ServerName == "" {
-		config = tlsCloneConfig(config)
+		//config = tlsCloneConfig(config)
 		config.ServerName = hostname
 	}
 	// Do not make conn.Handshake() here because downstairs we will prepare
