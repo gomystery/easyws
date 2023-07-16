@@ -2,8 +2,9 @@ package easyws
 
 import (
 	"bytes"
-	_interface "easynet/interface"
 	"fmt"
+	"github.com/gobwas/httphead"
+	_interface "github.com/gomystery/easynet/interface"
 
 	//"github.com/gobwas/httphead"
 )
@@ -92,17 +93,17 @@ func btrim(bts []byte) []byte {
 	return bts[i:j]
 }
 //
-//func strHasToken(header, token string) (has bool) {
-//	return btsHasToken(strToBytes(header), strToBytes(token))
-//}
-//
-//func btsHasToken(header, token []byte) (has bool) {
-//	httphead.ScanTokens(header, func(v []byte) bool {
-//		has = bytes.EqualFold(v, token)
-//		return !has
-//	})
-//	return has
-//}
+func strHasToken(header, token string) (has bool) {
+	return btsHasToken(strToBytes(header), strToBytes(token))
+}
+
+func btsHasToken(header, token []byte) (has bool) {
+	httphead.ScanTokens(header, func(v []byte) bool {
+		has = bytes.EqualFold(v, token)
+		return !has
+	})
+	return has
+}
 
 const (
 	toLower  = 'a' - 'A'      // for use with OR.

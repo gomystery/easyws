@@ -2,15 +2,14 @@ package easyws
 
 import (
 	"bytes"
-	"context"
-	"easynet"
-	_interface "easynet/interface"
-	"net/http"
-
-	//_interface "github.com/gomystery/easynet/interface"
-	//"github.com/gomystery/easynet"
 	"fmt"
 	"io"
+	"context"
+	"net/http"
+
+	_interface "github.com/gomystery/easynet/interface"
+	"github.com/gomystery/easynet"
+
 )
 
 
@@ -159,13 +158,13 @@ type Upgrader struct {
 	// preferable."
 	//
 	// Deprecated: use Negotiate instead.
-	//Extension func(httphead.Option) bool
+	Extension func(Option) bool
 
 	// ExtensionCustom allow user to parse Sec-WebSocket-Extensions header
 	// manually.
 	//
 	// If ExtensionCustom() decides to accept received extension, it must
-	// append appropriate option to the given slice of httphead.Option.
+	// append appropriate option to the given slice of Option.
 	// It returns results of append() to the given slice and a flag that
 	// reports whether given header value is wellformed or not.
 	//
@@ -174,7 +173,7 @@ type Upgrader struct {
 	//
 	// Note that returned options should be valid until Upgrade returns.
 	// If ExtensionCustom is set, it used instead of Extension function.
-	//ExtensionCustom func([]byte, []httphead.Option) ([]httphead.Option, bool)
+	ExtensionCustom func([]byte, []Option) ([]Option, bool)
 
 	// Negotiate is the callback that is used to negotiate extensions from
 	// the client's offer. If this field is set, then the returned non-zero
@@ -187,7 +186,7 @@ type Upgrader struct {
 	// sent with appropriate HTTP error code and body set to error message.
 	//
 	// RejectConnectionError could be used to get more control on response.
-	//Negotiate func(httphead.Option) (httphead.Option, error)
+	Negotiate func(Option) (Option, error)
 
 	// Header is an optional HandshakeHeader instance that could be used to
 	// write additional headers to the handshake response.
@@ -342,7 +341,7 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []by
 	for err == nil {
 		line, e := readLine(stream)
 		if e != nil {
-			return hs, e
+			return hs,nil, e
 		}
 		if len(line) == 0 {
 			// Blank line, no more lines to read.
@@ -401,22 +400,22 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []by
 				}
 			}
 
-		//case headerSecExtensionsCanonical:
-		//	if f := u.Negotiate; err == nil && f != nil {
-		//		hs.Extensions, err = negotiateExtensions(v, hs.Extensions, f)
-		//	}
-		//	// DEPRECATED path.
-		//	if custom, check := u.ExtensionCustom, u.Extension; u.Negotiate == nil && (custom != nil || check != nil) {
-		//		var ok bool
-		//		if custom != nil {
-		//			hs.Extensions, ok = custom(v, hs.Extensions)
-		//		} else {
-		//			hs.Extensions, ok = btsSelectExtensions(v, hs.Extensions, check)
-		//		}
-		//		if !ok {
-		//			err = ErrMalformedRequest
-		//		}
-		//	}
+		case headerSecExtensionsCanonical:
+			if f := u.Negotiate; err == nil && f != nil {
+				hs.Extensions, err = negotiateExtensions(v, hs.Extensions, f)
+			}
+			// DEPRECATED path.
+			if custom, check := u.ExtensionCustom, u.Extension; u.Negotiate == nil && (custom != nil || check != nil) {
+				var ok bool
+				if custom != nil {
+					hs.Extensions, ok = custom(v, hs.Extensions)
+				} else {
+					hs.Extensions, ok = btsSelectExtensions(v, hs.Extensions, check)
+				}
+				if !ok {
+					err = ErrMalformedRequest
+				}
+			}
 
 		default:
 			if onHeader := u.OnHeader; onHeader != nil {

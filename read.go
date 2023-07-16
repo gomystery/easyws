@@ -1,10 +1,12 @@
 package easyws
 
 import (
-	_interface "easynet/interface"
 	"encoding/binary"
 	"fmt"
 	"io"
+
+	_interface "github.com/gomystery/easynet/interface"
+
 )
 
 // Errors used by frame reader.
