@@ -2,6 +2,7 @@ package easyws
 
 import (
 	"bytes"
+	"github.com/gomystery/easyws/httphead"
 	"io"
 	"net/http"
 	"net/url"
@@ -186,8 +187,8 @@ func httpGetHeader(h http.Header, key string) string {
 // for the value of this header field is 1#token, where the definitions of
 // constructs and rules are as given in [RFC2616].
 func strSelectProtocol(h string, check func(string) bool) (ret string, ok bool) {
-	ok = ScanTokens(strToBytes(h), func(v []byte) bool {
-		if check(btsToString(v)) {
+	ok = ScanTokens(httphead.StrToBytes(h), func(v []byte) bool {
+		if check(httphead.BtsToString(v)) {
 			ret = string(v)
 			return false
 		}
@@ -211,7 +212,7 @@ func btsSelectProtocol(h []byte, check func([]byte) bool) (ret string, ok bool) 
 	return ret, ok
 }
 
-func btsSelectExtensions(h []byte, selected []Option, check func(Option) bool) ([]Option, bool) {
+func btsSelectExtensions(h []byte, selected []httphead.Option, check func(httphead.Option) bool) ([]httphead.Option, bool) {
 	s := OptionSelector{
 		Flags: SelectCopy,
 		Check: check,
@@ -219,7 +220,7 @@ func btsSelectExtensions(h []byte, selected []Option, check func(Option) bool) (
 	return s.Select(h, selected)
 }
 
-func negotiateMaybe(in Option, dest []Option, f func(Option) (Option, error)) ([]Option, error) {
+func negotiateMaybe(in httphead.Option, dest []httphead.Option, f func(httphead.Option) (httphead.Option, error)) ([]httphead.Option, error) {
 	if in.Size() == 0 {
 		return dest, nil
 	}
@@ -234,11 +235,11 @@ func negotiateMaybe(in Option, dest []Option, f func(Option) (Option, error)) ([
 }
 
 func negotiateExtensions(
-	h []byte, dest []Option,
-	f func(Option) (Option, error),
-) (_ []Option, err error) {
+	h []byte, dest []httphead.Option,
+	f func(httphead.Option) (httphead.Option, error),
+) (_ []httphead.Option, err error) {
 	index := -1
-	var current Option
+	var current httphead.Option
 	ok := ScanOptions(h, func(i int, name, attr, val []byte) Control {
 		if i != index {
 			dest, err = negotiateMaybe(current, dest, f)
@@ -246,7 +247,7 @@ func negotiateExtensions(
 				return ControlBreak
 			}
 			index = i
-			current = Option{Name: name}
+			current = httphead.Option{Name: name}
 		}
 		if attr != nil {
 			current.Parameters.Set(attr, val)
@@ -281,7 +282,7 @@ func httpWriteUpgradeRequest(
 	u *url.URL,
 	nonce []byte,
 	protocols []string,
-	extensions []Option,
+	extensions []httphead.Option,
 	header HandshakeHeader,
 ) {
 	bw.WriteString("GET ")
@@ -298,7 +299,7 @@ func httpWriteUpgradeRequest(
 	// WriteString() copy given string into its inner buffer, unlike Write()
 	// which may write p directly to the underlying io.Writer – which in turn
 	// will lead to p escape.
-	httpWriteHeader(bw, headerSecKey, btsToString(nonce))
+	httpWriteHeader(bw, headerSecKey, httphead.BtsToString(nonce))
 
 	if len(protocols) > 0 {
 		httpWriteHeaderKey(bw, headerSecProtocol)
@@ -335,7 +336,7 @@ func httpWriteResponseUpgrade(bw *bytes.Buffer, nonce []byte, hs Handshake, head
 	}
 	if len(hs.Extensions) > 0 {
 		httpWriteHeaderKey(bw, headerSecExtensions)
-		WriteOptions(bw, hs.Extensions)
+		httphead.WriteOptions(bw, hs.Extensions)
 		bw.WriteString(crlf)
 	}
 	if header != nil {

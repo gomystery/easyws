@@ -1,11 +1,11 @@
 package easyws
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
+	"github.com/gomystery/easyws/httphead"
 	"math/rand"
 )
 
@@ -74,5 +74,5 @@ func writeAccept(bw *bytes.Buffer, nonce []byte) (int, error) {
 	// WriteString() copy given string into its inner buffer, unlike Write()
 	// which may write p directly to the underlying io.Writer – which in turn
 	// will lead to p escape.
-	return bw.WriteString(btsToString(accept))
+	return bw.WriteString(httphead.BtsToString(accept))
 }

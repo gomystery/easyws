@@ -6,7 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/gobwas/pool/pbufio"
+	"github.com/gomystery/easyws/httphead"
 	"io"
 	"net"
 	"net/http"
@@ -28,7 +28,7 @@ type Handshake struct {
 	Protocol string
 
 	// Extensions is the list of negotiated extensions.
-	Extensions []Option
+	Extensions []httphead.Option
 }
 
 // Errors used by the websocket client.
@@ -76,7 +76,7 @@ type Dialer struct {
 	//
 	// See https://tools.ietf.org/html/rfc6455#section-4.1
 	// See https://tools.ietf.org/html/rfc6455#section-9.1
-	Extensions []Option
+	Extensions []httphead.Option
 
 	// Header is an optional HandshakeHeader instance that could be used to
 	// write additional headers to the handshake request.
@@ -317,14 +317,16 @@ func (d Dialer) Upgrade(conn io.ReadWriter, u *url.URL) (br *bufio.Reader, hs Ha
 
 	// Read HTTP status line like "HTTP/1.1 101 Switching Protocols".
 	// todo dialer
-	sl, err := readLine(br)
+	//sl, err := readLine(br)
 	if err != nil {
 		return br, hs, err
 	}
 	// Begin validation of the response.
 	// See https://tools.ietf.org/html/rfc6455#section-4.2.2
 	// Parse request line data like HTTP version, uri and method.
-	resp, err := httpParseResponseLine(sl)
+	// todo fix
+	//resp, err := httpParseResponseLine(sl)
+	resp, err := httpParseResponseLine(nil)
 	if err != nil {
 		return br, hs, err
 	}
@@ -340,7 +342,9 @@ func (d Dialer) Upgrade(conn io.ReadWriter, u *url.URL) (br *bufio.Reader, hs Ha
 			// Invoke callback with multireader of status-line bytes br.
 			onStatusError(resp.status, resp.reason,
 				io.MultiReader(
-					bytes.NewReader(sl),
+					// todo fix
+					//bytes.NewReader(sl),
+					bytes.NewReader(nil),
 					strings.NewReader(crlf),
 					br,
 				),
@@ -354,7 +358,9 @@ func (d Dialer) Upgrade(conn io.ReadWriter, u *url.URL) (br *bufio.Reader, hs Ha
 	// technical errors (such as parsing error) and protocol errors.
 	var headerSeen byte
 	for {
-		line, e := readLine(br)
+		//line, e := readLine(br)
+		// todo fix
+		line, e := readLine(nil)
 		if e != nil {
 			err = e
 			return br, hs, err
@@ -370,7 +376,7 @@ func (d Dialer) Upgrade(conn io.ReadWriter, u *url.URL) (br *bufio.Reader, hs Ha
 			return br, hs, err
 		}
 
-		switch btsToString(k) {
+		switch httphead.BtsToString(k) {
 		case headerUpgradeCanonical:
 			headerSeen |= headerSeenUpgrade
 			if !bytes.Equal(v, specHeaderValueUpgrade) && !bytes.EqualFold(v, specHeaderValueUpgrade) {
@@ -448,9 +454,9 @@ func (d Dialer) Upgrade(conn io.ReadWriter, u *url.URL) (br *bufio.Reader, hs Ha
 // // It is useful in rare cases, when Dialer.Dial() returns non-nil buffer which
 // // contains unprocessed buffered data, that was sent by the server quickly
 // // right after handshake.
-func PutReader(br *bufio.Reader) {
-	pbufio.PutReader(br)
-}
+//func PutReader(br *bufio.Reader) {
+//	pbufio.PutReader(br)
+//}
 
 // StatusError contains an unexpected status-line code from the server.
 type StatusError int
@@ -464,13 +470,13 @@ func isTimeoutError(err error) bool {
 	return ok && t.Timeout()
 }
 
-func matchSelectedExtensions(selected []byte, wanted, received []Option) ([]Option, error) {
+func matchSelectedExtensions(selected []byte, wanted, received []httphead.Option) ([]httphead.Option, error) {
 	if len(selected) == 0 {
 		return received, nil
 	}
 	var (
 		index  int
-		option Option
+		option httphead.Option
 		err    error
 	)
 	index = -1
@@ -504,7 +510,7 @@ func matchSelectedExtensions(selected []byte, wanted, received []Option) ([]Opti
 				err = ErrHandshakeBadExtensions
 				return ControlBreak
 			}
-			option = Option{Name: name}
+			option = httphead.Option{Name: name}
 		}
 		if attr != nil {
 			option.Parameters.Set(attr, val)

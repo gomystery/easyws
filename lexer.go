@@ -2,6 +2,7 @@ package easyws
 
 import (
 	"bytes"
+	"github.com/gomystery/easyws/httphead"
 )
 
 // ItemType encodes type of the lexing token.
@@ -320,10 +321,10 @@ func SkipSpace(p []byte) (n int) {
 		case len(p) >= 3 &&
 			p[0] == '\r' &&
 			p[1] == '\n' &&
-			OctetTypes[p[2]].IsSpace():
+			httphead.OctetTypes[p[2]].IsSpace():
 			p = p[3:]
 			n += 3
-		case OctetTypes[p[0]].IsSpace():
+		case httphead.OctetTypes[p[0]].IsSpace():
 			p = p[1:]
 			n++
 		default:
@@ -342,13 +343,13 @@ func ScanToken(p []byte) (n int, t ItemType) {
 
 	c := p[0]
 	switch {
-	case OctetTypes[c].IsSeparator():
+	case httphead.OctetTypes[c].IsSeparator():
 		return 1, ItemSeparator
 
-	case OctetTypes[c].IsToken():
+	case httphead.OctetTypes[c].IsToken():
 		for n = 1; n < len(p); n++ {
 			c := p[n]
-			if !OctetTypes[c].IsToken() {
+			if !httphead.OctetTypes[c].IsToken() {
 				break
 			}
 		}
