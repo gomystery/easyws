@@ -7,6 +7,7 @@ package easyws
 
 import (
 	"bytes"
+	"github.com/gomystery/easyws/httphead"
 	"strings"
 )
 
@@ -43,14 +44,14 @@ func ScanTokens(data []byte, it func([]byte) bool) bool {
 //
 // Note that appended options are all consist of subslices of data. That is,
 // mutation of data will mutate appended options.
-func ParseOptions(data []byte, options []Option) ([]Option, bool) {
+func ParseOptions(data []byte, options []httphead.Option) ([]httphead.Option, bool) {
 	var i int
 	index := -1
 	return options, ScanOptions(data, func(idx int, name, attr, val []byte) Control {
 		if idx != index {
 			index = idx
 			i = len(options)
-			options = append(options, Option{Name: name})
+			options = append(options, httphead.Option{Name: name})
 		}
 		if attr != nil {
 			options[i].Parameters.Set(attr, val)
@@ -94,7 +95,7 @@ type OptionSelector struct {
 	// Check is a filter function that applied to every Option that possibly
 	// could be selected.
 	// If Check is nil all options will be selected.
-	Check func(Option) bool
+	Check func(httphead.Option) bool
 
 	// Flags contains flags for options selection.
 	Flags SelectFlag
@@ -108,8 +109,8 @@ type OptionSelector struct {
 
 // Select parses header data and appends it to given slice of Option.
 // It also returns flag of successful (wellformed input) parsing.
-func (s OptionSelector) Select(data []byte, options []Option) ([]Option, bool) {
-	var current Option
+func (s OptionSelector) Select(data []byte, options []httphead.Option) ([]httphead.Option, bool) {
+	var current httphead.Option
 	var has bool
 	index := -1
 
@@ -139,7 +140,7 @@ func (s OptionSelector) Select(data []byte, options []Option) ([]Option, bool) {
 				}
 			}
 			index = idx
-			current = Option{Name: name}
+			current = httphead.Option{Name: name}
 			has = true
 		}
 		if attr != nil {
@@ -158,8 +159,8 @@ func (s OptionSelector) Select(data []byte, options []Option) ([]Option, bool) {
 	return options, ok
 }
 
-func defaultAlloc(n int) []byte { return make([]byte, n) }
-func defaultCheck(Option) bool  { return true }
+func defaultAlloc(n int) []byte         { return make([]byte, n) }
+func defaultCheck(httphead.Option) bool { return true }
 
 // Control represents operation that scanner should perform.
 type Control byte

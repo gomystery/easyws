@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/gobwas/httphead"
 	_interface "github.com/gomystery/easynet/interface"
+	httphead2 "github.com/gomystery/easyws/httphead"
+
 	//"github.com/gobwas/httphead"
 )
 
@@ -93,7 +95,7 @@ func btrim(bts []byte) []byte {
 }
 
 func strHasToken(header, token string) (has bool) {
-	return btsHasToken(strToBytes(header), strToBytes(token))
+	return btsHasToken(httphead2.StrToBytes(header), httphead2.StrToBytes(token))
 }
 
 func btsHasToken(header, token []byte) (has bool) {
@@ -149,13 +151,13 @@ func canonicalizeHeaderKey(k []byte) {
 // NOTE: it may return copied flag to notify that returned buffer is safe to
 // use.
 func readLine(stream _interface.IInputStream) ([]byte, error) {
-	var line []byte
 	dataBytes := stream.Begin(nil)
 	index := bytes.IndexByte(dataBytes, '\n')
+	var line = make([]byte,index)
 	if index >= 0 {
 		// "\n" is present
-		line = dataBytes[:index]
-		stream.End(dataBytes[index:])
+		copy(line,dataBytes[:index])
+		stream.End(dataBytes[index+1:])
 		n := len(line)
 		// Cut '\r' for '\r\n'.
 		if n > 1 && line[n-1] == '\r' {

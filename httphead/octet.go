@@ -1,4 +1,4 @@
-package easyws
+package httphead
 
 // OctetType desribes character type.
 //

@@ -1,4 +1,4 @@
-package easyws
+package httphead
 
 import (
 	"bytes"

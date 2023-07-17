@@ -3,9 +3,8 @@ package easyws
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
-
 	_interface "github.com/gomystery/easynet/interface"
+	"github.com/gomystery/easyws/httphead"
 )
 
 // Errors used by frame reader.
@@ -62,7 +61,12 @@ func ReadHeader(stream _interface.IInputStream) (h Header, err error) {
 	// Increase len of bts to extra bytes need to read.
 	// Overwrite first 2 bytes that was read before.
 	bts = bts[:extra]
-	_, err = io.ReadFull(r, bts)
+
+	data = stream.Begin(nil)
+	bts = data[:len(bts)]
+	stream.End(data[len(bts):])
+
+
 	if err != nil {
 		return h, err
 	}
@@ -93,30 +97,30 @@ func ReadHeader(stream _interface.IInputStream) (h Header, err error) {
 // for frame.Header.Length size inside to read frame payload into.
 //
 // Note that ReadFrame does not unmask payload.
-func ReadFrame(r io.Reader) (f Frame, err error) {
-	f.Header, err = ReadHeader(r)
-	if err != nil {
-		return f, err
-	}
-
-	if f.Header.Length > 0 {
-		// int(f.Header.Length) is safe here cause we have
-		// checked it for overflow above in ReadHeader.
-		f.Payload = make([]byte, int(f.Header.Length))
-		_, err = io.ReadFull(r, f.Payload)
-	}
-
-	return f, err
-}
+//func ReadFrame(r io.Reader) (f Frame, err error) {
+//	f.Header, err = ReadHeader(r)
+//	if err != nil {
+//		return f, err
+//	}
+//
+//	if f.Header.Length > 0 {
+//		// int(f.Header.Length) is safe here cause we have
+//		// checked it for overflow above in ReadHeader.
+//		f.Payload = make([]byte, int(f.Header.Length))
+//		_, err = io.ReadFull(r, f.Payload)
+//	}
+//
+//	return f, err
+//}
 
 // MustReadFrame is like ReadFrame but panics if frame can not be read.
-func MustReadFrame(r io.Reader) Frame {
-	f, err := ReadFrame(r)
-	if err != nil {
-		panic(err)
-	}
-	return f
-}
+//func MustReadFrame(r io.Reader) Frame {
+//	f, err := ReadFrame(r)
+//	if err != nil {
+//		panic(err)
+//	}
+//	return f
+//}
 
 // ParseCloseFrameData parses close frame status code and closure reason if any provided.
 // If there is no status code in the payload
@@ -143,6 +147,6 @@ func ParseCloseFrameDataUnsafe(payload []byte) (code StatusCode, reason string) 
 		return code, reason
 	}
 	code = StatusCode(binary.BigEndian.Uint16(payload))
-	reason = btsToString(payload[2:])
+	reason = httphead.BtsToString(payload[2:])
 	return code, reason
 }

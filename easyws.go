@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/gomystery/easyws/httphead"
 	"io"
 	"net/http"
 
@@ -147,7 +148,7 @@ type Upgrader struct {
 	// preferable."
 	//
 	// Deprecated: use Negotiate instead.
-	Extension func(Option) bool
+	Extension func(httphead.Option) bool
 
 	// ExtensionCustom allow user to parse Sec-WebSocket-Extensions header
 	// manually.
@@ -162,7 +163,7 @@ type Upgrader struct {
 	//
 	// Note that returned options should be valid until Upgrade returns.
 	// If ExtensionCustom is set, it used instead of Extension function.
-	ExtensionCustom func([]byte, []Option) ([]Option, bool)
+	ExtensionCustom func([]byte, []httphead.Option) ([]httphead.Option, bool)
 
 	// Negotiate is the callback that is used to negotiate extensions from
 	// the client's offer. If this field is set, then the returned non-zero
@@ -175,7 +176,7 @@ type Upgrader struct {
 	// sent with appropriate HTTP error code and body set to error message.
 	//
 	// RejectConnectionError could be used to get more control on response.
-	Negotiate func(Option) (Option, error)
+	Negotiate func(httphead.Option) (httphead.Option, error)
 
 	// Header is an optional HandshakeHeader instance that could be used to
 	// write additional headers to the handshake response.
@@ -309,7 +310,7 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake, out []b
 		// to actually parse it.
 		err = ErrHandshakeBadProtocol
 
-	case btsToString(req.method) != http.MethodGet:
+	case httphead.BtsToString(req.method) != http.MethodGet:
 		err = ErrHandshakeBadMethod
 
 	default:
@@ -330,7 +331,7 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake, out []b
 		if e != nil {
 			return hs, nil, e
 		}
-		if len(line) == 0 {
+		if len(httphead.Trim(string(line))) == 0 {
 			// Blank line, no more lines to read.
 			break
 		}
@@ -341,7 +342,7 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake, out []b
 			break
 		}
 
-		switch btsToString(k) {
+		switch httphead.BtsToString(k) {
 		case headerHostCanonical:
 			headerSeen |= headerSeenHost
 			if onHost := u.OnHost; onHost != nil {
@@ -380,7 +381,7 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake, out []b
 				if custom != nil {
 					hs.Protocol, ok = custom(v)
 				} else {
-					//hs.Protocol, ok = btsSelectProtocol(v, check)
+					hs.Protocol, ok = btsSelectProtocol(v, check)
 				}
 				if !ok {
 					err = ErrMalformedRequest

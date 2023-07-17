@@ -1,6 +1,8 @@
-package easyws
+package httphead
 
-import "io"
+import (
+	"io"
+)
 
 var (
 	comma     = []byte{','}
