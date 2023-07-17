@@ -1,10 +1,6 @@
 package easyws
 
-import (
-
-
-)
-
+import ()
 
 func mustMakeNonce() (ret []byte) {
 	ret = make([]byte, nonceSize)

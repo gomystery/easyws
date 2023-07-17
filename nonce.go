@@ -67,7 +67,7 @@ func initAcceptFromNonce(accept, nonce []byte) {
 	base64.StdEncoding.Encode(accept, sum[:])
 }
 
-func writeAccept(bw *bufio.Writer, nonce []byte) (int, error) {
+func writeAccept(bw *bytes.Buffer, nonce []byte) (int, error) {
 	accept := make([]byte, acceptSize)
 	initAcceptFromNonce(accept, nonce)
 	// NOTE: write accept bytes as a string to prevent heap allocation –

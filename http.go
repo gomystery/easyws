@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 )
 
@@ -184,79 +185,79 @@ func httpGetHeader(h http.Header, key string) string {
 // characters as defined in [RFC2616] and MUST all be unique strings.  The ABNF
 // for the value of this header field is 1#token, where the definitions of
 // constructs and rules are as given in [RFC2616].
-//func strSelectProtocol(h string, check func(string) bool) (ret string, ok bool) {
-//	ok = httphead.ScanTokens(strToBytes(h), func(v []byte) bool {
-//		if check(btsToString(v)) {
-//			ret = string(v)
-//			return false
-//		}
-//		return true
-//	})
-//	return ret, ok
-//}
-//
-//func btsSelectProtocol(h []byte, check func([]byte) bool) (ret string, ok bool) {
-//	var selected []byte
-//	ok = httphead.ScanTokens(h, func(v []byte) bool {
-//		if check(v) {
-//			selected = v
-//			return false
-//		}
-//		return true
-//	})
-//	if ok && selected != nil {
-//		return string(selected), true
-//	}
-//	return ret, ok
-//}
+func strSelectProtocol(h string, check func(string) bool) (ret string, ok bool) {
+	ok = ScanTokens(strToBytes(h), func(v []byte) bool {
+		if check(btsToString(v)) {
+			ret = string(v)
+			return false
+		}
+		return true
+	})
+	return ret, ok
+}
 
-//func btsSelectExtensions(h []byte, selected []httphead.Option, check func(httphead.Option) bool) ([]httphead.Option, bool) {
-//	s := httphead.OptionSelector{
-//		Flags: httphead.SelectCopy,
-//		Check: check,
-//	}
-//	return s.Select(h, selected)
-//}
-//
-//func negotiateMaybe(in httphead.Option, dest []httphead.Option, f func(httphead.Option) (httphead.Option, error)) ([]httphead.Option, error) {
-//	if in.Size() == 0 {
-//		return dest, nil
-//	}
-//	opt, err := f(in)
-//	if err != nil {
-//		return nil, err
-//	}
-//	if opt.Size() > 0 {
-//		dest = append(dest, opt)
-//	}
-//	return dest, nil
-//}
-//
-//func negotiateExtensions(
-//	h []byte, dest []httphead.Option,
-//	f func(httphead.Option) (httphead.Option, error),
-//) (_ []httphead.Option, err error) {
-//	index := -1
-//	var current httphead.Option
-//	ok := httphead.ScanOptions(h, func(i int, name, attr, val []byte) httphead.Control {
-//		if i != index {
-//			dest, err = negotiateMaybe(current, dest, f)
-//			if err != nil {
-//				return httphead.ControlBreak
-//			}
-//			index = i
-//			current = httphead.Option{Name: name}
-//		}
-//		if attr != nil {
-//			current.Parameters.Set(attr, val)
-//		}
-//		return httphead.ControlContinue
-//	})
-//	if !ok {
-//		return nil, ErrMalformedRequest
-//	}
-//	return negotiateMaybe(current, dest, f)
-//}
+func btsSelectProtocol(h []byte, check func([]byte) bool) (ret string, ok bool) {
+	var selected []byte
+	ok = ScanTokens(h, func(v []byte) bool {
+		if check(v) {
+			selected = v
+			return false
+		}
+		return true
+	})
+	if ok && selected != nil {
+		return string(selected), true
+	}
+	return ret, ok
+}
+
+func btsSelectExtensions(h []byte, selected []Option, check func(Option) bool) ([]Option, bool) {
+	s := OptionSelector{
+		Flags: SelectCopy,
+		Check: check,
+	}
+	return s.Select(h, selected)
+}
+
+func negotiateMaybe(in Option, dest []Option, f func(Option) (Option, error)) ([]Option, error) {
+	if in.Size() == 0 {
+		return dest, nil
+	}
+	opt, err := f(in)
+	if err != nil {
+		return nil, err
+	}
+	if opt.Size() > 0 {
+		dest = append(dest, opt)
+	}
+	return dest, nil
+}
+
+func negotiateExtensions(
+	h []byte, dest []Option,
+	f func(Option) (Option, error),
+) (_ []Option, err error) {
+	index := -1
+	var current Option
+	ok := ScanOptions(h, func(i int, name, attr, val []byte) Control {
+		if i != index {
+			dest, err = negotiateMaybe(current, dest, f)
+			if err != nil {
+				return ControlBreak
+			}
+			index = i
+			current = Option{Name: name}
+		}
+		if attr != nil {
+			current.Parameters.Set(attr, val)
+		}
+		return ControlContinue
+	})
+	if !ok {
+		return nil, ErrMalformedRequest
+	}
+	return negotiateMaybe(current, dest, f)
+}
 
 func httpWriteHeader(bw *bytes.Buffer, key, value string) {
 	httpWriteHeaderKey(bw, key)
@@ -274,75 +275,75 @@ func httpWriteHeaderKey(bw *bytes.Buffer, key string) {
 	bw.WriteString(key)
 	bw.WriteString(colonAndSpace)
 }
-//
-//func httpWriteUpgradeRequest(
-//	bw *bytes.Buffer,
-//	u *url.URL,
-//	nonce []byte,
-//	protocols []string,
-//	//extensions []httphead.Option,
-//	header HandshakeHeader,
-//) {
-//	bw.WriteString("GET ")
-//	bw.WriteString(u.RequestURI())
-//	bw.WriteString(" HTTP/1.1\r\n")
-//
-//	httpWriteHeader(bw, headerHost, u.Host)
-//
-//	httpWriteHeaderBts(bw, headerUpgrade, specHeaderValueUpgrade)
-//	httpWriteHeaderBts(bw, headerConnection, specHeaderValueConnection)
-//	httpWriteHeaderBts(bw, headerSecVersion, specHeaderValueSecVersion)
-//
-//	// NOTE: write nonce bytes as a string to prevent heap allocation –
-//	// WriteString() copy given string into its inner buffer, unlike Write()
-//	// which may write p directly to the underlying io.Writer – which in turn
-//	// will lead to p escape.
-//	httpWriteHeader(bw, headerSecKey, btsToString(nonce))
-//
-//	if len(protocols) > 0 {
-//		httpWriteHeaderKey(bw, headerSecProtocol)
-//		for i, p := range protocols {
-//			if i > 0 {
-//				bw.WriteString(commaAndSpace)
-//			}
-//			bw.WriteString(p)
-//		}
-//		bw.WriteString(crlf)
-//	}
-//
-//	if len(extensions) > 0 {
-//		httpWriteHeaderKey(bw, headerSecExtensions)
-//		bw.WriteString(crlf)
-//	}
-//
-//	if header != nil {
-//		header.WriteTo(bw)
-//	}
-//
-//	bw.WriteString(crlf)
-//}
-//
-//func httpWriteResponseUpgrade(bw *bytes.Buffer, nonce []byte, hs Handshake, header HandshakeHeaderFunc) {
-//	bw.WriteString(textHeadUpgrade)
-//
-//	httpWriteHeaderKey(bw, headerSecAccept)
-//	writeAccept(bw, nonce)
-//	bw.WriteString(crlf)
-//
-//	if hs.Protocol != "" {
-//		httpWriteHeader(bw, headerSecProtocol, hs.Protocol)
-//	}
-//	//if len(hs.Extensions) > 0 {
-//	//	httpWriteHeaderKey(bw, headerSecExtensions)
-//	//	httphead.WriteOptions(bw, hs.Extensions)
-//	//	bw.WriteString(crlf)
-//	//}
-//	if header != nil {
-//		header(bw)
-//	}
-//
-//	bw.WriteString(crlf)
-//}
+
+func httpWriteUpgradeRequest(
+	bw *bytes.Buffer,
+	u *url.URL,
+	nonce []byte,
+	protocols []string,
+	extensions []Option,
+	header HandshakeHeader,
+) {
+	bw.WriteString("GET ")
+	bw.WriteString(u.RequestURI())
+	bw.WriteString(" HTTP/1.1\r\n")
+
+	httpWriteHeader(bw, headerHost, u.Host)
+
+	httpWriteHeaderBts(bw, headerUpgrade, specHeaderValueUpgrade)
+	httpWriteHeaderBts(bw, headerConnection, specHeaderValueConnection)
+	httpWriteHeaderBts(bw, headerSecVersion, specHeaderValueSecVersion)
+
+	// NOTE: write nonce bytes as a string to prevent heap allocation –
+	// WriteString() copy given string into its inner buffer, unlike Write()
+	// which may write p directly to the underlying io.Writer – which in turn
+	// will lead to p escape.
+	httpWriteHeader(bw, headerSecKey, btsToString(nonce))
+
+	if len(protocols) > 0 {
+		httpWriteHeaderKey(bw, headerSecProtocol)
+		for i, p := range protocols {
+			if i > 0 {
+				bw.WriteString(commaAndSpace)
+			}
+			bw.WriteString(p)
+		}
+		bw.WriteString(crlf)
+	}
+
+	if len(extensions) > 0 {
+		httpWriteHeaderKey(bw, headerSecExtensions)
+		bw.WriteString(crlf)
+	}
+
+	if header != nil {
+		header.WriteTo(bw)
+	}
+
+	bw.WriteString(crlf)
+}
+
+func httpWriteResponseUpgrade(bw *bytes.Buffer, nonce []byte, hs Handshake, header HandshakeHeaderFunc) {
+	bw.WriteString(textHeadUpgrade)
+
+	httpWriteHeaderKey(bw, headerSecAccept)
+	writeAccept(bw, nonce)
+	bw.WriteString(crlf)
+
+	if hs.Protocol != "" {
+		httpWriteHeader(bw, headerSecProtocol, hs.Protocol)
+	}
+	if len(hs.Extensions) > 0 {
+		httpWriteHeaderKey(bw, headerSecExtensions)
+		WriteOptions(bw, hs.Extensions)
+		bw.WriteString(crlf)
+	}
+	if header != nil {
+		header(bw)
+	}
+
+	bw.WriteString(crlf)
+}
 
 func httpWriteResponseError(bw *bytes.Buffer, err error, code int, header HandshakeHeaderFunc) {
 	switch code {

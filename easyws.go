@@ -3,16 +3,13 @@ package easyws
 import (
 	"bytes"
 	"context"
-	"easynet"
-	_interface "easynet/interface"
-	"net/http"
-
-	//_interface "github.com/gomystery/easynet/interface"
-	//"github.com/gomystery/easynet"
 	"fmt"
 	"io"
-)
+	"net/http"
 
+	"github.com/gomystery/easynet"
+	_interface "github.com/gomystery/easynet/interface"
+)
 
 type Handler struct {
 	IsUpgrade map[string]bool
@@ -29,30 +26,28 @@ func (h Handler) OnConnect(conn _interface.IConnection) error {
 
 }
 
-
 func (h Handler) OnReceive(conn _interface.IConnection, stream _interface.IInputStream) ([]byte, error) {
 
 	// todo handover
-	 isUpgrade,ok:=h.IsUpgrade[conn.RemoteAddr()]
-	 if (!ok) || (!isUpgrade) {
-		 upgrader  := &Upgrader{}
-		 _,out, err :=upgrader.Upgrade(stream)
-		 if err != nil {
-			 return nil,err
-		 }
-		 return out, nil
-	 }
-
+	isUpgrade, ok := h.IsUpgrade[conn.RemoteAddr()]
+	if (!ok) || (!isUpgrade) {
+		upgrader := &Upgrader{}
+		_, out, err := upgrader.Upgrade(stream)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
 
 	// todo frame
 	var outFrame []byte
-	header,err:=ReadHeader(stream)
+	header, err := ReadHeader(stream)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	payload := make([]byte, header.Length)
-	data :=stream.Begin(nil)
-	copy(payload,data[:header.Length])
+	data := stream.Begin(nil)
+	copy(payload, data[:header.Length])
 	stream.End(data[header.Length:])
 
 	if header.Masked {
@@ -63,15 +58,15 @@ func (h Handler) OnReceive(conn _interface.IConnection, stream _interface.IInput
 	// RFC6455 says.
 	header.Masked = false
 
-	wbuf,err := WriteHeader(header)
+	wbuf, err := WriteHeader(header)
 	if err != nil {
 		return nil, err
 	}
-	outFrame = make([]byte,len(wbuf)+len(payload))
-	copy(outFrame[:len(wbuf)],wbuf)
-	copy(outFrame[len(wbuf):len(wbuf)+len(payload)],payload)
+	outFrame = make([]byte, len(wbuf)+len(payload))
+	copy(outFrame[:len(wbuf)], wbuf)
+	copy(outFrame[len(wbuf):len(wbuf)+len(payload)], payload)
 	if header.OpCode == OpClose {
-		return nil,nil
+		return nil, nil
 	}
 	return outFrame, nil
 
@@ -85,32 +80,25 @@ func (h Handler) OnClose(conn _interface.IConnection, err error) error {
 	return nil
 }
 
-
 func NewEasyWs(ip string, port int32) *EasyWs {
 	config := easynet.NewDefaultNetConfig("tcp", ip, port)
 	handler := &Handler{
 		IsUpgrade: map[string]bool{},
 	}
 	net := easynet.NewEasyNet(context.Background(), "NetPoll", config, handler)
-	ws :=&EasyWs{
+	ws := &EasyWs{
 		Handler: handler,
-		EasyNet:net,
+		EasyNet: net,
 	}
 
 	return ws
 }
 
 type EasyWs struct {
-
-	Handler  *Handler
+	Handler *Handler
 
 	EasyNet *easynet.EasyNet
-
 }
-
-
-
-
 
 // Upgrader contains options for upgrading connection to websocket.
 type Upgrader struct {
@@ -159,13 +147,13 @@ type Upgrader struct {
 	// preferable."
 	//
 	// Deprecated: use Negotiate instead.
-	//Extension func(httphead.Option) bool
+	Extension func(Option) bool
 
 	// ExtensionCustom allow user to parse Sec-WebSocket-Extensions header
 	// manually.
 	//
 	// If ExtensionCustom() decides to accept received extension, it must
-	// append appropriate option to the given slice of httphead.Option.
+	// append appropriate option to the given slice of Option.
 	// It returns results of append() to the given slice and a flag that
 	// reports whether given header value is wellformed or not.
 	//
@@ -174,7 +162,7 @@ type Upgrader struct {
 	//
 	// Note that returned options should be valid until Upgrade returns.
 	// If ExtensionCustom is set, it used instead of Extension function.
-	//ExtensionCustom func([]byte, []httphead.Option) ([]httphead.Option, bool)
+	ExtensionCustom func([]byte, []Option) ([]Option, bool)
 
 	// Negotiate is the callback that is used to negotiate extensions from
 	// the client's offer. If this field is set, then the returned non-zero
@@ -187,7 +175,7 @@ type Upgrader struct {
 	// sent with appropriate HTTP error code and body set to error message.
 	//
 	// RejectConnectionError could be used to get more control on response.
-	//Negotiate func(httphead.Option) (httphead.Option, error)
+	Negotiate func(Option) (Option, error)
 
 	// Header is an optional HandshakeHeader instance that could be used to
 	// write additional headers to the handshake response.
@@ -252,6 +240,7 @@ type Upgrader struct {
 	// RejectConnectionError could be used to get more control on response.
 	OnBeforeUpgrade func() (header HandshakeHeader, err error)
 }
+
 // Upgrade zero-copy upgrades connection to WebSocket. It interprets given conn
 // as connection with incoming HTTP Upgrade request.
 //
@@ -261,7 +250,7 @@ type Upgrader struct {
 // malformed and usually connection should be closed.
 // Even when error is non-nil Upgrade will write appropriate response into
 // connection in compliance with RFC.
-func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []byte, err error) {
+func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake, out []byte, err error) {
 	// headerSeen constants helps to report whether or not some header was seen
 	// during reading request bytes.
 	const (
@@ -281,18 +270,15 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []by
 			headerSeenSecKey
 	)
 
-
-
-
 	// Read HTTP request line like "GET /ws HTTP/1.1".
 	rl, err := readLine(stream)
 	if err != nil {
-		return hs,nil, err
+		return hs, nil, err
 	}
 	// Parse request line data like HTTP version, uri and method.
 	req, err := httpParseRequestLine(rl)
 	if err != nil {
-		return hs,nil, err
+		return hs, nil, err
 	}
 
 	// Prepare stack-based handshake header list.
@@ -342,7 +328,7 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []by
 	for err == nil {
 		line, e := readLine(stream)
 		if e != nil {
-			return hs, e
+			return hs, nil, e
 		}
 		if len(line) == 0 {
 			// Blank line, no more lines to read.
@@ -401,22 +387,22 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []by
 				}
 			}
 
-		//case headerSecExtensionsCanonical:
-		//	if f := u.Negotiate; err == nil && f != nil {
-		//		hs.Extensions, err = negotiateExtensions(v, hs.Extensions, f)
-		//	}
-		//	// DEPRECATED path.
-		//	if custom, check := u.ExtensionCustom, u.Extension; u.Negotiate == nil && (custom != nil || check != nil) {
-		//		var ok bool
-		//		if custom != nil {
-		//			hs.Extensions, ok = custom(v, hs.Extensions)
-		//		} else {
-		//			hs.Extensions, ok = btsSelectExtensions(v, hs.Extensions, check)
-		//		}
-		//		if !ok {
-		//			err = ErrMalformedRequest
-		//		}
-		//	}
+		case headerSecExtensionsCanonical:
+			if f := u.Negotiate; err == nil && f != nil {
+				hs.Extensions, err = negotiateExtensions(v, hs.Extensions, f)
+			}
+			// DEPRECATED path.
+			if custom, check := u.ExtensionCustom, u.Extension; u.Negotiate == nil && (custom != nil || check != nil) {
+				var ok bool
+				if custom != nil {
+					hs.Extensions, ok = custom(v, hs.Extensions)
+				} else {
+					hs.Extensions, ok = btsSelectExtensions(v, hs.Extensions, check)
+				}
+				if !ok {
+					err = ErrMalformedRequest
+				}
+			}
 
 		default:
 			if onHeader := u.OnHeader; onHeader != nil {
@@ -476,14 +462,13 @@ func (u Upgrader) Upgrade(stream _interface.IInputStream) (hs Handshake,out []by
 		}
 		httpWriteResponseError(&buffer, err, code, header.WriteTo)
 		// Do not store Flush() error to not override already existing one.
-		return hs,[]byte(buffer.String()), err
+		return hs, []byte(buffer.String()), err
 	}
 
 	httpWriteResponseUpgrade(&buffer, nonce, hs, header.WriteTo)
 
-	return hs,[]byte(buffer.String()), err
+	return hs, []byte(buffer.String()), err
 }
-
 
 type handshakeHeader [2]HandshakeHeader
 
@@ -497,4 +482,3 @@ func (hs handshakeHeader) WriteTo(w io.Writer) (n int64, err error) {
 	}
 	return n, err
 }
-

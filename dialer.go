@@ -2,9 +2,11 @@ package easyws
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/gobwas/pool/pbufio"
 	"io"
 	"net"
 	"net/http"
@@ -12,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-
 )
 
 // Constants used by Dialer.
@@ -28,7 +28,7 @@ type Handshake struct {
 	Protocol string
 
 	// Extensions is the list of negotiated extensions.
-	//Extensions []httphead.Option
+	Extensions []Option
 }
 
 // Errors used by the websocket client.
@@ -76,7 +76,7 @@ type Dialer struct {
 	//
 	// See https://tools.ietf.org/html/rfc6455#section-4.1
 	// See https://tools.ietf.org/html/rfc6455#section-9.1
-	Extensions []httphead.Option
+	Extensions []Option
 
 	// Header is an optional HandshakeHeader instance that could be used to
 	// write additional headers to the handshake request.
@@ -249,7 +249,7 @@ func (d Dialer) tlsClient(conn net.Conn, hostname string) net.Conn {
 		config = tlsDefaultConfig()
 	}
 	if config.ServerName == "" {
-		config = tlsCloneConfig(config)
+		//config = tlsCloneConfig(config)
 		config.ServerName = hostname
 	}
 	// Do not make conn.Handshake() here because downstairs we will prepare
@@ -273,181 +273,184 @@ var (
 //
 // It returns handshake info and some bytes which could be written by the peer
 // right after response and be caught by us during buffered read.
-//func (d Dialer) Upgrade(conn io.ReadWriter, u *url.URL) (br *bufio.Reader, hs Handshake, err error) {
-//	// headerSeen constants helps to report whether or not some header was seen
-//	// during reading request bytes.
-//	const (
-//		headerSeenUpgrade = 1 << iota
-//		headerSeenConnection
-//		headerSeenSecAccept
-//
-//		// headerSeenAll is the value that we expect to receive at the end of
-//		// headers read/parse loop.
-//		headerSeenAll = 0 |
-//			headerSeenUpgrade |
-//			headerSeenConnection |
-//			headerSeenSecAccept
-//	)
-//
-//	br = pbufio.GetReader(conn,
-//		nonZero(d.ReadBufferSize, DefaultClientReadBufferSize),
-//	)
-//	bw := pbufio.GetWriter(conn,
-//		nonZero(d.WriteBufferSize, DefaultClientWriteBufferSize),
-//	)
-//	defer func() {
-//		pbufio.PutWriter(bw)
-//		if br.Buffered() == 0 || err != nil {
-//			// Server does not wrote additional bytes to the connection or
-//			// error occurred. That is, no reason to return buffer.
-//			pbufio.PutReader(br)
-//			br = nil
-//		}
-//	}()
-//
-//	nonce := make([]byte, nonceSize)
-//	initNonce(nonce)
-//
-//	httpWriteUpgradeRequest(bw, u, nonce, d.Protocols, d.Extensions, d.Header)
-//	if err := bw.Flush(); err != nil {
-//		return br, hs, err
-//	}
-//
-//	// Read HTTP status line like "HTTP/1.1 101 Switching Protocols".
-//	sl, err := readLine(br)
-//	if err != nil {
-//		return br, hs, err
-//	}
-//	// Begin validation of the response.
-//	// See https://tools.ietf.org/html/rfc6455#section-4.2.2
-//	// Parse request line data like HTTP version, uri and method.
-//	resp, err := httpParseResponseLine(sl)
-//	if err != nil {
-//		return br, hs, err
-//	}
-//	// Even if RFC says "1.1 or higher" without mentioning the part of the
-//	// version, we apply it only to minor part.
-//	if resp.major != 1 || resp.minor < 1 {
-//		err = ErrHandshakeBadProtocol
-//		return br, hs, err
-//	}
-//	if resp.status != http.StatusSwitchingProtocols {
-//		err = StatusError(resp.status)
-//		if onStatusError := d.OnStatusError; onStatusError != nil {
-//			// Invoke callback with multireader of status-line bytes br.
-//			onStatusError(resp.status, resp.reason,
-//				io.MultiReader(
-//					bytes.NewReader(sl),
-//					strings.NewReader(crlf),
-//					br,
-//				),
-//			)
-//		}
-//		return br, hs, err
-//	}
-//	// If response status is 101 then we expect all technical headers to be
-//	// valid. If not, then we stop processing response without giving user
-//	// ability to read non-technical headers. That is, we do not distinguish
-//	// technical errors (such as parsing error) and protocol errors.
-//	var headerSeen byte
-//	for {
-//		line, e := readLine(br)
-//		if e != nil {
-//			err = e
-//			return br, hs, err
-//		}
-//		if len(line) == 0 {
-//			// Blank line, no more lines to read.
-//			break
-//		}
-//
-//		k, v, ok := httpParseHeaderLine(line)
-//		if !ok {
-//			err = ErrMalformedResponse
-//			return br, hs, err
-//		}
-//
-//		switch btsToString(k) {
-//		case headerUpgradeCanonical:
-//			headerSeen |= headerSeenUpgrade
-//			if !bytes.Equal(v, specHeaderValueUpgrade) && !bytes.EqualFold(v, specHeaderValueUpgrade) {
-//				err = ErrHandshakeBadUpgrade
-//				return br, hs, err
-//			}
-//
-//		case headerConnectionCanonical:
-//			headerSeen |= headerSeenConnection
-//			// Note that as RFC6455 says:
-//			//   > A |Connection| header field with value "Upgrade".
-//			// That is, in server side, "Connection" header could contain
-//			// multiple token. But in response it must contains exactly one.
-//			if !bytes.Equal(v, specHeaderValueConnection) && !bytes.EqualFold(v, specHeaderValueConnection) {
-//				err = ErrHandshakeBadConnection
-//				return br, hs, err
-//			}
-//
-//		case headerSecAcceptCanonical:
-//			headerSeen |= headerSeenSecAccept
-//			if !checkAcceptFromNonce(v, nonce) {
-//				err = ErrHandshakeBadSecAccept
-//				return br, hs, err
-//			}
-//
-//		case headerSecProtocolCanonical:
-//			// RFC6455 1.3:
-//			//   "The server selects one or none of the acceptable protocols
-//			//   and echoes that value in its handshake to indicate that it has
-//			//   selected that protocol."
-//			for _, want := range d.Protocols {
-//				if string(v) == want {
-//					hs.Protocol = want
-//					break
-//				}
-//			}
-//			if hs.Protocol == "" {
-//				// Server echoed subprotocol that is not present in client
-//				// requested protocols.
-//				err = ErrHandshakeBadSubProtocol
-//				return br, hs, err
-//			}
-//
-//		case headerSecExtensionsCanonical:
-//			hs.Extensions, err = matchSelectedExtensions(v, d.Extensions, hs.Extensions)
-//			if err != nil {
-//				return br, hs, err
-//			}
-//
-//		default:
-//			if onHeader := d.OnHeader; onHeader != nil {
-//				if e := onHeader(k, v); e != nil {
-//					err = e
-//					return br, hs, err
-//				}
-//			}
-//		}
-//	}
-//	if err == nil && headerSeen != headerSeenAll {
-//		switch {
-//		case headerSeen&headerSeenUpgrade == 0:
-//			err = ErrHandshakeBadUpgrade
-//		case headerSeen&headerSeenConnection == 0:
-//			err = ErrHandshakeBadConnection
-//		case headerSeen&headerSeenSecAccept == 0:
-//			err = ErrHandshakeBadSecAccept
-//		default:
-//			panic("unknown headers state")
-//		}
-//	}
-//	return br, hs, err
-//}
-//
-//// PutReader returns bufio.Reader instance to the inner reuse pool.
-//// It is useful in rare cases, when Dialer.Dial() returns non-nil buffer which
-//// contains unprocessed buffered data, that was sent by the server quickly
-//// right after handshake.
-//func PutReader(br *bufio.Reader) {
-//	pbufio.PutReader(br)
-//}
+func (d Dialer) Upgrade(conn io.ReadWriter, u *url.URL) (br *bufio.Reader, hs Handshake, err error) {
+	// headerSeen constants helps to report whether or not some header was seen
+	// during reading request bytes.
+	const (
+		headerSeenUpgrade = 1 << iota
+		headerSeenConnection
+		headerSeenSecAccept
+
+		// headerSeenAll is the value that we expect to receive at the end of
+		// headers read/parse loop.
+		headerSeenAll = 0 |
+			headerSeenUpgrade |
+			headerSeenConnection |
+			headerSeenSecAccept
+	)
+
+	//br = pbufio.GetReader(conn,
+	//	nonZero(d.ReadBufferSize, DefaultClientReadBufferSize),
+	//)
+	//bw := pbufio.GetWriter(conn,
+	//	nonZero(d.WriteBufferSize, DefaultClientWriteBufferSize),
+	//)
+	//defer func() {
+	//	pbufio.PutWriter(bw)
+	//	if br.Buffered() == 0 || err != nil {
+	//		// Server does not wrote additional bytes to the connection or
+	//		// error occurred. That is, no reason to return buffer.
+	//		pbufio.PutReader(br)
+	//		br = nil
+	//	}
+	//}()
+
+	var bw *bytes.Buffer
+
+	nonce := make([]byte, nonceSize)
+	initNonce(nonce)
+
+	httpWriteUpgradeRequest(bw, u, nonce, d.Protocols, d.Extensions, d.Header)
+	if _, err := conn.Write(bw.Bytes()); err != nil {
+		return br, hs, err
+	}
+
+	// Read HTTP status line like "HTTP/1.1 101 Switching Protocols".
+	// todo dialer
+	sl, err := readLine(br)
+	if err != nil {
+		return br, hs, err
+	}
+	// Begin validation of the response.
+	// See https://tools.ietf.org/html/rfc6455#section-4.2.2
+	// Parse request line data like HTTP version, uri and method.
+	resp, err := httpParseResponseLine(sl)
+	if err != nil {
+		return br, hs, err
+	}
+	// Even if RFC says "1.1 or higher" without mentioning the part of the
+	// version, we apply it only to minor part.
+	if resp.major != 1 || resp.minor < 1 {
+		err = ErrHandshakeBadProtocol
+		return br, hs, err
+	}
+	if resp.status != http.StatusSwitchingProtocols {
+		err = StatusError(resp.status)
+		if onStatusError := d.OnStatusError; onStatusError != nil {
+			// Invoke callback with multireader of status-line bytes br.
+			onStatusError(resp.status, resp.reason,
+				io.MultiReader(
+					bytes.NewReader(sl),
+					strings.NewReader(crlf),
+					br,
+				),
+			)
+		}
+		return br, hs, err
+	}
+	// If response status is 101 then we expect all technical headers to be
+	// valid. If not, then we stop processing response without giving user
+	// ability to read non-technical headers. That is, we do not distinguish
+	// technical errors (such as parsing error) and protocol errors.
+	var headerSeen byte
+	for {
+		line, e := readLine(br)
+		if e != nil {
+			err = e
+			return br, hs, err
+		}
+		if len(line) == 0 {
+			// Blank line, no more lines to read.
+			break
+		}
+
+		k, v, ok := httpParseHeaderLine(line)
+		if !ok {
+			err = ErrMalformedResponse
+			return br, hs, err
+		}
+
+		switch btsToString(k) {
+		case headerUpgradeCanonical:
+			headerSeen |= headerSeenUpgrade
+			if !bytes.Equal(v, specHeaderValueUpgrade) && !bytes.EqualFold(v, specHeaderValueUpgrade) {
+				err = ErrHandshakeBadUpgrade
+				return br, hs, err
+			}
+
+		case headerConnectionCanonical:
+			headerSeen |= headerSeenConnection
+			// Note that as RFC6455 says:
+			//   > A |Connection| header field with value "Upgrade".
+			// That is, in server side, "Connection" header could contain
+			// multiple token. But in response it must contains exactly one.
+			if !bytes.Equal(v, specHeaderValueConnection) && !bytes.EqualFold(v, specHeaderValueConnection) {
+				err = ErrHandshakeBadConnection
+				return br, hs, err
+			}
+
+		case headerSecAcceptCanonical:
+			headerSeen |= headerSeenSecAccept
+			if !checkAcceptFromNonce(v, nonce) {
+				err = ErrHandshakeBadSecAccept
+				return br, hs, err
+			}
+
+		case headerSecProtocolCanonical:
+			// RFC6455 1.3:
+			//   "The server selects one or none of the acceptable protocols
+			//   and echoes that value in its handshake to indicate that it has
+			//   selected that protocol."
+			for _, want := range d.Protocols {
+				if string(v) == want {
+					hs.Protocol = want
+					break
+				}
+			}
+			if hs.Protocol == "" {
+				// Server echoed subprotocol that is not present in client
+				// requested protocols.
+				err = ErrHandshakeBadSubProtocol
+				return br, hs, err
+			}
+
+		case headerSecExtensionsCanonical:
+			hs.Extensions, err = matchSelectedExtensions(v, d.Extensions, hs.Extensions)
+			if err != nil {
+				return br, hs, err
+			}
+
+		default:
+			if onHeader := d.OnHeader; onHeader != nil {
+				if e := onHeader(k, v); e != nil {
+					err = e
+					return br, hs, err
+				}
+			}
+		}
+	}
+	if err == nil && headerSeen != headerSeenAll {
+		switch {
+		case headerSeen&headerSeenUpgrade == 0:
+			err = ErrHandshakeBadUpgrade
+		case headerSeen&headerSeenConnection == 0:
+			err = ErrHandshakeBadConnection
+		case headerSeen&headerSeenSecAccept == 0:
+			err = ErrHandshakeBadSecAccept
+		default:
+			panic("unknown headers state")
+		}
+	}
+	return br, hs, err
+}
+
+// // PutReader returns bufio.Reader instance to the inner reuse pool.
+// // It is useful in rare cases, when Dialer.Dial() returns non-nil buffer which
+// // contains unprocessed buffered data, that was sent by the server quickly
+// // right after handshake.
+func PutReader(br *bufio.Reader) {
+	pbufio.PutReader(br)
+}
 
 // StatusError contains an unexpected status-line code from the server.
 type StatusError int
@@ -461,62 +464,62 @@ func isTimeoutError(err error) bool {
 	return ok && t.Timeout()
 }
 
-//func matchSelectedExtensions(selected []byte, wanted, received []httphead.Option) ([]httphead.Option, error) {
-//	if len(selected) == 0 {
-//		return received, nil
-//	}
-//	var (
-//		index  int
-//		option httphead.Option
-//		err    error
-//	)
-//	index = -1
-//	match := func() (ok bool) {
-//		for _, want := range wanted {
-//			// A server accepts one or more extensions by including a
-//			// |Sec-WebSocket-Extensions| header field containing one or more
-//			// extensions that were requested by the client.
-//			//
-//			// The interpretation of any extension parameters, and what
-//			// constitutes a valid response by a server to a requested set of
-//			// parameters by a client, will be defined by each such extension.
-//			if bytes.Equal(option.Name, want.Name) {
-//				// Check parsed extension to be present in client
-//				// requested extensions. We move matched extension
-//				// from client list to avoid allocation of httphead.Option.Name,
-//				// httphead.Option.Parameters have to be copied from the header
-//				want.Parameters, _ = option.Parameters.Copy(make([]byte, option.Parameters.Size()))
-//				received = append(received, want)
-//				return true
-//			}
-//		}
-//		return false
-//	}
-//	ok := httphead.ScanOptions(selected, func(i int, name, attr, val []byte) httphead.Control {
-//		if i != index {
-//			// Met next option.
-//			index = i
-//			if i != 0 && !match() {
-//				// Server returned non-requested extension.
-//				err = ErrHandshakeBadExtensions
-//				return httphead.ControlBreak
-//			}
-//			option = httphead.Option{Name: name}
-//		}
-//		if attr != nil {
-//			option.Parameters.Set(attr, val)
-//		}
-//		return httphead.ControlContinue
-//	})
-//	if !ok {
-//		err = ErrMalformedResponse
-//		return received, err
-//	}
-//	if !match() {
-//		return received, ErrHandshakeBadExtensions
-//	}
-//	return received, err
-//}
+func matchSelectedExtensions(selected []byte, wanted, received []Option) ([]Option, error) {
+	if len(selected) == 0 {
+		return received, nil
+	}
+	var (
+		index  int
+		option Option
+		err    error
+	)
+	index = -1
+	match := func() (ok bool) {
+		for _, want := range wanted {
+			// A server accepts one or more extensions by including a
+			// |Sec-WebSocket-Extensions| header field containing one or more
+			// extensions that were requested by the client.
+			//
+			// The interpretation of any extension parameters, and what
+			// constitutes a valid response by a server to a requested set of
+			// parameters by a client, will be defined by each such extension.
+			if bytes.Equal(option.Name, want.Name) {
+				// Check parsed extension to be present in client
+				// requested extensions. We move matched extension
+				// from client list to avoid allocation of Option.Name,
+				// Option.Parameters have to be copied from the header
+				want.Parameters, _ = option.Parameters.Copy(make([]byte, option.Parameters.Size()))
+				received = append(received, want)
+				return true
+			}
+		}
+		return false
+	}
+	ok := ScanOptions(selected, func(i int, name, attr, val []byte) Control {
+		if i != index {
+			// Met next option.
+			index = i
+			if i != 0 && !match() {
+				// Server returned non-requested extension.
+				err = ErrHandshakeBadExtensions
+				return ControlBreak
+			}
+			option = Option{Name: name}
+		}
+		if attr != nil {
+			option.Parameters.Set(attr, val)
+		}
+		return ControlContinue
+	})
+	if !ok {
+		err = ErrMalformedResponse
+		return received, err
+	}
+	if !match() {
+		return received, ErrHandshakeBadExtensions
+	}
+	return received, err
+}
 
 // setupContextDeadliner is a helper function that starts connection I/O
 // interrupter goroutine.
