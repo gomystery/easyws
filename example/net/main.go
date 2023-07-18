@@ -7,9 +7,7 @@ import (
 
 func main() {
 
-	ws:=easyws.NewEasyWs("127.0.0.1",9001)
+	ws := easyws.NewEasyWs("127.0.0.1", 9001)
 	fmt.Println(ws)
-
-
 
 }

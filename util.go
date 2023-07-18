@@ -6,7 +6,6 @@ import (
 	"github.com/gobwas/httphead"
 	_interface "github.com/gomystery/easynet/interface"
 	httphead2 "github.com/gomystery/easyws/httphead"
-
 	//"github.com/gobwas/httphead"
 )
 
@@ -153,10 +152,10 @@ func canonicalizeHeaderKey(k []byte) {
 func readLine(stream _interface.IInputStream) ([]byte, error) {
 	dataBytes := stream.Begin(nil)
 	index := bytes.IndexByte(dataBytes, '\n')
-	var line = make([]byte,index)
+	var line = make([]byte, index)
 	if index >= 0 {
 		// "\n" is present
-		copy(line,dataBytes[:index])
+		copy(line, dataBytes[:index])
 		stream.End(dataBytes[index+1:])
 		n := len(line)
 		// Cut '\r' for '\r\n'.

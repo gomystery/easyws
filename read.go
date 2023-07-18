@@ -24,7 +24,7 @@ func ReadHeader(stream _interface.IInputStream) (h Header, err error) {
 
 	// Prepare to hold first 2 bytes to choose size of next read.
 	data := stream.Begin(nil)
-	bts = data[:len(bts)]
+	copy(bts, data[:len(bts)])
 	stream.End(data[len(bts):])
 
 	h.Fin = bts[0]&bit0 != 0
@@ -63,9 +63,8 @@ func ReadHeader(stream _interface.IInputStream) (h Header, err error) {
 	bts = bts[:extra]
 
 	data = stream.Begin(nil)
-	bts = data[:len(bts)]
+	copy(bts, data[:len(bts)])
 	stream.End(data[len(bts):])
-
 
 	if err != nil {
 		return h, err
