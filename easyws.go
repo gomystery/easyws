@@ -37,6 +37,7 @@ func (h Handler) OnReceive(conn _interface.IConnection, stream _interface.IInput
 		if err != nil {
 			return nil, err
 		}
+		h.IsUpgrade[conn.RemoteAddr()] = true
 		return out, nil
 	}
 
@@ -49,7 +50,11 @@ func (h Handler) OnReceive(conn _interface.IConnection, stream _interface.IInput
 	payload := make([]byte, header.Length)
 	data := stream.Begin(nil)
 	copy(payload, data[:header.Length])
-	stream.End(data[header.Length:])
+	if int64(len(data)) > header.Length {
+		stream.End(data[header.Length:])
+	} else {
+		stream.End(nil)
+	}
 
 	if header.Masked {
 		Cipher(payload, header.Mask, 0)
