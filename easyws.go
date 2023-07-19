@@ -3,33 +3,32 @@ package easyws
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"github.com/gomystery/easyws/httphead"
+	//"fmt"
 	"io"
 	"net/http"
 
 	"github.com/gomystery/easynet"
 	_interface "github.com/gomystery/easynet/interface"
+	"github.com/gomystery/easyws/httphead"
 )
 
-type Handler struct {
-	IsUpgrade map[string]bool
+type NetHandler struct {
+	IsUpgrade     map[string]bool
+	EasyWsHandler IEasyWs
 }
 
-func (h Handler) OnStart(conn _interface.IConnection) error {
-	fmt.Println("test OnStart")
-	return nil
+func (h NetHandler) OnStart(conn _interface.IConnection) error {
+	return h.EasyWsHandler.OnStart()
 }
 
-func (h Handler) OnConnect(conn _interface.IConnection) error {
+func (h NetHandler) OnConnect(conn _interface.IConnection) error {
 	h.IsUpgrade[conn.RemoteAddr()] = false
-	return nil
-
+	return h.EasyWsHandler.OnConnect()
 }
 
-func (h Handler) OnReceive(conn _interface.IConnection, stream _interface.IInputStream) ([]byte, error) {
+func (h NetHandler) OnReceive(conn _interface.IConnection, stream _interface.IInputStream) ([]byte, error) {
 
-	// todo handover
+	// handover
 	isUpgrade, ok := h.IsUpgrade[conn.RemoteAddr()]
 	if (!ok) || (!isUpgrade) {
 		upgrader := &Upgrader{}
@@ -38,10 +37,14 @@ func (h Handler) OnReceive(conn _interface.IConnection, stream _interface.IInput
 			return nil, err
 		}
 		h.IsUpgrade[conn.RemoteAddr()] = true
+		err = h.EasyWsHandler.OnUpgraded()
+		if err != nil {
+			return nil, err
+		}
 		return out, nil
 	}
 
-	// todo frame
+	// todo frame,now only for text ,to add more kind of message for ws
 	var outFrame []byte
 	header, err := ReadHeader(stream)
 	if err != nil {
@@ -60,50 +63,61 @@ func (h Handler) OnReceive(conn _interface.IConnection, stream _interface.IInput
 		Cipher(payload, header.Mask, 0)
 	}
 
-	// Reset the Masked flag, server frames must not be masked as
-	// RFC6455 says.
-	header.Masked = false
-
-	wbuf, err := WriteHeader(header)
+	// to do something
+	wsOutForBiz, err := h.EasyWsHandler.OnReceive(payload)
 	if err != nil {
 		return nil, err
 	}
-	outFrame = make([]byte, len(wbuf)+len(payload))
-	copy(outFrame[:len(wbuf)], wbuf)
-	copy(outFrame[len(wbuf):len(wbuf)+len(payload)], payload)
-	if header.OpCode == OpClose {
+	f := NewTextFrame(wsOutForBiz)
+
+	// Reset the Masked flag, server frames must not be masked as
+	// RFC6455 says.
+	f.Header.Masked = false
+
+	wheaderBuf, err := WriteHeader(f.Header)
+	if err != nil {
+		return nil, err
+	}
+	outFrame = make([]byte, len(wheaderBuf)+len(f.Payload))
+	copy(outFrame[:len(wheaderBuf)], wheaderBuf)
+	copy(outFrame[len(wheaderBuf):len(wheaderBuf)+len(f.Payload)], f.Payload)
+	if f.Header.OpCode == OpClose {
 		return nil, nil
 	}
 	return outFrame, nil
 
 }
 
-func (h Handler) OnShutdown(conn _interface.IConnection) error {
-	return nil
+func (h NetHandler) OnShutdown(conn _interface.IConnection) error {
+	return h.EasyWsHandler.OnShutdown()
 }
 
-func (h Handler) OnClose(conn _interface.IConnection, err error) error {
-	return nil
+func (h NetHandler) OnClose(conn _interface.IConnection, err error) error {
+	return h.EasyWsHandler.OnClose(err)
 }
 
-func NewEasyWs(ip string, port int32) *EasyWs {
+func NewEasyWs(easyWsHanler IEasyWs, ip string, port int32) *EasyWs {
 	config := easynet.NewDefaultNetConfig("tcp", ip, port)
-	handler := &Handler{
-		IsUpgrade: map[string]bool{},
+	handler := &NetHandler{
+		IsUpgrade:     map[string]bool{},
+		EasyWsHandler: easyWsHanler,
 	}
 	net := easynet.NewEasyNet(context.Background(), "NetPoll", config, handler)
 	ws := &EasyWs{
-		Handler: handler,
-		EasyNet: net,
+		EasyNetHandler: handler,
+		EasyNet:        net,
+		EasyWsHandler:  easyWsHanler,
 	}
 
 	return ws
 }
 
 type EasyWs struct {
-	Handler *Handler
+	EasyNetHandler *NetHandler
 
 	EasyNet *easynet.EasyNet
+
+	EasyWsHandler IEasyWs
 }
 
 // Upgrader contains options for upgrading connection to websocket.
