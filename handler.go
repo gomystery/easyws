@@ -1,17 +1,17 @@
 package easyws
 
 type IEasyWs interface {
-	OnStart() error
+	OnStart() (OpCode, error)
 
-	OnConnect() error
+	OnConnect() (OpCode, error)
 
-	OnUpgraded() error
+	OnUpgraded() (OpCode, error)
 
-	OnReceive(msg []byte) ([]byte, error)
+	OnReceive(msg []byte) ([]byte, OpCode, error)
 
-	OnShutdown() error
+	OnShutdown() (OpCode, error)
 
-	OnClose(err error) error
+	OnClose(err error) (OpCode, error)
 
 	// todo to add more
 }
