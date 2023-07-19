@@ -18,12 +18,14 @@ type NetHandler struct {
 }
 
 func (h NetHandler) OnStart(conn _interface.IConnection) error {
-	return h.EasyWsHandler.OnStart()
+	_, err := h.EasyWsHandler.OnStart()
+	return err
 }
 
 func (h NetHandler) OnConnect(conn _interface.IConnection) error {
 	h.IsUpgrade[conn.RemoteAddr()] = false
-	return h.EasyWsHandler.OnConnect()
+	_, err := h.EasyWsHandler.OnConnect()
+	return err
 }
 
 func (h NetHandler) OnReceive(conn _interface.IConnection, stream _interface.IInputStream) ([]byte, error) {
@@ -37,7 +39,7 @@ func (h NetHandler) OnReceive(conn _interface.IConnection, stream _interface.IIn
 			return nil, err
 		}
 		h.IsUpgrade[conn.RemoteAddr()] = true
-		err = h.EasyWsHandler.OnUpgraded()
+		_, err = h.EasyWsHandler.OnUpgraded()
 		if err != nil {
 			return nil, err
 		}
@@ -64,11 +66,23 @@ func (h NetHandler) OnReceive(conn _interface.IConnection, stream _interface.IIn
 	}
 
 	// to do something
-	wsOutForBiz, err := h.EasyWsHandler.OnReceive(payload)
+	wsOutForBiz, opCode, err := h.EasyWsHandler.OnReceive(payload)
 	if err != nil {
 		return nil, err
 	}
-	f := NewTextFrame(wsOutForBiz)
+	var f Frame
+	switch opCode {
+	case OpText:
+		f = NewTextFrame(wsOutForBiz)
+	case OpBinary:
+		f = NewBinaryFrame(wsOutForBiz)
+	case OpPing:
+		f = NewPongFrame(wsOutForBiz)
+	case OpPong:
+		f = NewPingFrame(wsOutForBiz)
+	case OpClose:
+		f = NewCloseFrame(wsOutForBiz)
+	}
 
 	// Reset the Masked flag, server frames must not be masked as
 	// RFC6455 says.
