@@ -46,7 +46,6 @@ func (h NetHandler) OnReceive(conn _interface.IConnection, stream _interface.IIn
 		return out, nil
 	}
 
-	// todo frame,now only for text ,to add more kind of message for ws
 	var outFrame []byte
 	header, err := ReadHeader(stream)
 	if err != nil {
@@ -103,11 +102,13 @@ func (h NetHandler) OnReceive(conn _interface.IConnection, stream _interface.IIn
 }
 
 func (h NetHandler) OnShutdown(conn _interface.IConnection) error {
-	return h.EasyWsHandler.OnShutdown()
+	_, err := h.EasyWsHandler.OnShutdown()
+	return err
 }
 
 func (h NetHandler) OnClose(conn _interface.IConnection, err error) error {
-	return h.EasyWsHandler.OnClose(err)
+	_, err = h.EasyWsHandler.OnClose(err)
+	return err
 }
 
 func NewEasyWs(easyWsHanler IEasyWs, ip string, port int32) *EasyWs {
